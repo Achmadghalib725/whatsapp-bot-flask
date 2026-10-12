@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 import os
 import requests
+from twilio.twiml.messaging_response import MessagingResponse
 
 app = Flask(__name__)
 
@@ -15,29 +16,23 @@ def health():
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    data = request.get_json()
-    
-    if 'entry' not in data:
-        return jsonify({"status": "ignored"}), 200
-    
     try:
-        for entry in data['entry']:
-            for change in entry.get('changes', []):
-                value = change.get('value', {})
-                messages = value.get('messages', [])
-                
-                for msg in messages:
-                    if 'text' in msg:
-                        from_number = msg.get('from', '')
-                        message_body = msg.get('text', {}).get('body', '')
-                        
-                        # Auto reply
-                        reply = f"Kamu kirim: {message_body}\nTerima kasih sudah chat!"
-                        send_whatsapp_message(from_number, reply)
+        # Twilio sends incoming messages as form-encoded data
+        body = request.values.get('Body', '')
+        from_number = request.values.get('From', '')  # e.g. whatsapp:+62...
+
+        if not body or not from_number:
+            return jsonify({"status": "ignored"}), 200
+
+        reply = f"Kamu kirim: {body}\nTerima kasih sudah chat!"
+
+        # Reply via TwiML so Twilio delivers the message
+        resp = MessagingResponse()
+        resp.message(reply)
+        return str(resp), 200, {'Content-Type': 'application/xml'}
     except Exception as e:
         print(f"Error: {e}")
-    
-    return jsonify({"status": "received"}), 200
+        return jsonify({"status": "error"}), 200
 
 def send_whatsapp_message(to, message):
     try:
